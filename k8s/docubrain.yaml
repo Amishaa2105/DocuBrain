@@ -1,0 +1,123 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: docubrain-config
+data:
+  DOCUBRAIN_DB_PATH: /data/docubrain.db
+  GROQ_MODEL: openai/gpt-oss-20b
+  MAX_UPLOAD_BYTES: "20971520"
+  MAX_DOCUMENT_CHUNKS: "5000"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: docubrain-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docubrain
+  labels:
+    app.kubernetes.io/name: docubrain
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: docubrain
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: docubrain
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8000"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: docubrain
+          image: ghcr.io/amishaa2105/docubrain:main
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: docubrain-config
+          env:
+            - name: GROQ_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: docubrain-secrets
+                  key: GROQ_API_KEY
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 3Gi
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 24
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: document-data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: document-data
+          persistentVolumeClaim:
+            claimName: docubrain-data
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: docubrain
+  labels:
+    app.kubernetes.io/name: docubrain
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: docubrain
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP

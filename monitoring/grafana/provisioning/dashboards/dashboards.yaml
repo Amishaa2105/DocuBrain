@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: DocuBrain
+    orgId: 1
+    folder: DocuBrain
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards
