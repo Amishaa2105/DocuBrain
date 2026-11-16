@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from pypdf import PdfReader
 from sentence_transformers import SentenceTransformer
 import numpy as np
@@ -28,11 +28,23 @@ def health():
 
 @app.post("/upload")
 async def upload_pdf(file: UploadFile = File(...)):
-    reader = PdfReader(file.file)
+    try:
+        reader = PdfReader(file.file)
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="This is not a valid PDF file. Please upload a real PDF.",
+        )
 
     text = ""
     for page in reader.pages:
         text = text + (page.extract_text() or "")
+
+    if not text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="No readable text found in this PDF (it may be a scanned image).",
+        )
 
     chunks = []
     for start in range(0, len(text), 500):
@@ -42,7 +54,6 @@ async def upload_pdf(file: UploadFile = File(...)):
     store["vectors"] = embed_model.encode(chunks, normalize_embeddings=True)
 
     return {"message": "PDF uploaded", "total_chunks": len(chunks)}
-
 
 @app.post("/ask")
 async def ask(question: str):
