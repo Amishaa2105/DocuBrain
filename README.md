@@ -45,7 +45,7 @@ Open [http://localhost:8000](http://localhost:8000). API reference: [http://loca
 
 ```powershell
 python -m pip install -r requirements-dev.txt
-pytest -q
+python -m pytest -q
 ```
 
 The tests use fake embeddings and a fake answer provider, so they do not call Groq or download the embedding model.
